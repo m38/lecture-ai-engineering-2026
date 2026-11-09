@@ -6,10 +6,13 @@
 
 import json
 import random
+from datetime import datetime, timezone
 from functools import cache
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = PROJECT_DIR / "data"
+LEARNING_LOG_DIR = PROJECT_DIR / "learning_log"
 MAX_RESULTS = 3
 
 
@@ -98,3 +101,16 @@ def make_quiz(lecture: int) -> str:
         },
         ensure_ascii=False,
     )
+
+
+def save_learning_log(content: str) -> str:
+    """学習内容の記録を learning_log/ に保存する。
+
+    保存は取り消しにくいため、実行前に必ず利用者の承認を得る。
+    """
+    LEARNING_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    path = LEARNING_LOG_DIR / f"{timestamp}.md"
+    with path.open("x", encoding="utf-8") as f:
+        f.write(content)
+    return f"学習記録を {LEARNING_LOG_DIR.name}/{path.name} に保存しました。"

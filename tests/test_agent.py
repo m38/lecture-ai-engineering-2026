@@ -10,6 +10,7 @@ from pydantic_ai.messages import ToolCallPart, ToolReturnPart
 from pydantic_ai.models.test import TestModel
 
 from app.agent import agent
+from app import tools
 
 BASE_TOOLS = {"search_glossary", "get_lecture_summary"}
 
@@ -40,3 +41,30 @@ def test_glossary_result_reaches_the_model():
         result = agent.run_sync("RAGとは？")
     returns = _parts(result, ToolReturnPart)
     assert returns and returns[0].tool_name == "search_glossary"
+
+
+def test_save_learning_log_waits_for_approval(tmp_path, monkeypatch):
+    log_dir = tmp_path / "learning_log"
+    monkeypatch.setattr(tools, "LEARNING_LOG_DIR", log_dir)
+    model = TestModel(call_tools=["save_learning_log"])
+
+    with agent.override(model=model):
+        result = agent.run_sync("学習記録を保存して")
+
+    assert isinstance(result.output, DeferredToolRequests)
+    assert [call.tool_name for call in result.output.approvals] == ["save_learning_log"]
+    assert not log_dir.exists()
+
+    approval = result.output.approvals[0]
+    deferred_results = result.output.build_results(
+        approvals={approval.tool_call_id: True}
+    )
+    with agent.override(model=TestModel(call_tools=[])):
+        resumed = agent.run_sync(
+            "学習記録を保存して",
+            message_history=result.all_messages(),
+            deferred_tool_results=deferred_results,
+        )
+
+    assert not isinstance(resumed.output, DeferredToolRequests)
+    assert len(list(log_dir.glob("*.md"))) == 1
